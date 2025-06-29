@@ -220,50 +220,51 @@ class App {
                 if (!primaryContact) {
                     throw new Error('Primary contact not found after processing');
                 }
+                // Ensure primary's email and phone are first in the arrays
+                if (primaryContact.email && emails.includes(primaryContact.email)) {
+                    const index = emails.indexOf(primaryContact.email);
+                    if (index > 0) {
+                        emails.splice(index, 1);
+                        emails.unshift(primaryContact.email);
+                    }
+                }
                 
+                if (primaryContact.phoneNumber && phoneNumbers.includes(primaryContact.phoneNumber)) {
+                    const index = phoneNumbers.indexOf(primaryContact.phoneNumber);
+                    if (index > 0) {
+                        phoneNumbers.splice(index, 1);
+                        phoneNumbers.unshift(primaryContact.phoneNumber);
+                    }
+                }
+
                 return res.status(200).json({
                     contact: {
                         primaryContatctId: primaryContact.id,
                         emails,
                         phoneNumbers,
                         secondaryContactIds
-        
-        // Prepare response - ensure primary contact's email/phone are first in the arrays
-        const allEmails = allLinkedContacts
-            .map(c => c.email)
-            .filter(Boolean);
-            
-        const allPhoneNumbers = allLinkedContacts
-            .map(c => c.phoneNumber)
-            .filter(Boolean);
-        
-        // Remove duplicates while preserving order
-        const emails = [...new Set(allEmails)];
-        const phoneNumbers = [...new Set(allPhoneNumbers)];
-        
-        // Get all secondary contact IDs
-        const secondaryContactIds = primaryContact ? allLinkedContacts
-            .filter((c: Contact) => c.id !== primaryContact.id)
-            .map((c: Contact) => c.id) : [];
-        
-        // Ensure primary's email and phone are first in the arrays
-        if (primaryContact && primaryContact.email && emails.includes(primaryContact.email)) {
-            const index = emails.indexOf(primaryContact.email);
-            if (index > 0) {
-                emails.splice(index, 1);
-                emails.unshift(primaryContact.email);
+                    }
+                });
+            } catch (error) {
+                next(error);
             }
-        }
-        
-        if (primaryContact && primaryContact.phoneNumber && phoneNumbers.includes(primaryContact.phoneNumber)) {
-            const index = phoneNumbers.indexOf(primaryContact.phoneNumber);
-            if (index > 0) {
-                phoneNumbers.splice(index, 1);
-                phoneNumbers.unshift(primaryContact.phoneNumber);
-            }
-        }
-        // Add your routes here
+        };
 
+        // Register the identify route handler
+        this.app.post('/identify', (req, res, next) => {
+            identifyHandler(req, res, next).catch(next);
+        });
+
+        // GET /identify route for debugging
+        this.app.get('/identify', async (req: Request, res: Response, next: NextFunction) => {
+            try {
+                const allContacts = await db.select().from(contacts);
+                res.status(200).json({ contacts: allContacts });
+            } catch (error) {
+                next(error);
+            }
+        });
+        
         // 404 handler
         this.app.use((req: Request, res: Response) => {
             res.status(404).json({ message: 'Not Found' });
@@ -273,7 +274,7 @@ class App {
     private initializeErrorHandling(): void {
         // Error handling middleware
         this.app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-            console.error(err.stack);
+            console.error('Error:', err.stack);
             res.status(500).json({
                 message: 'Internal Server Error',
                 error: process.env.NODE_ENV === 'development' ? err.message : undefined
