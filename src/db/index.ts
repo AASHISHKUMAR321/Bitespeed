@@ -1,10 +1,11 @@
-import mysql from 'mysql2';
+import * as mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
-import { drizzle } from 'drizzle-orm/singlestore/driver';
+import { drizzle } from 'drizzle-orm/mysql2';
 
 dotenv.config();
 
-const pool = mysql.createConnection({
+// Create a connection pool instead of a single connection
+const poolPromise = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '3306', 10),
     user: process.env.DB_USER || 'root',
@@ -12,15 +13,17 @@ const pool = mysql.createConnection({
     database: process.env.DB_NAME || 'bitspeed',
 });
 
-// Test the connection
-pool.connect((err)=>{
-    if(err){
-        console.log('Database connection failed',err)
-        return
-    }
-    const db = drizzle({ client: pool });
-    console.log('Database connected')
-})
+// Test the connection by getting a connection from the pool
+poolPromise.getConnection()
+    .then(connection => {
+        console.log('Database connected successfully');
+        connection.release(); // Release the connection back to the pool
+    })
+    .catch(err => {
+        console.error('Database connection failed:', err);
+    });
 
+// Create the drizzle instance with the pool
+export const db = drizzle(poolPromise);
 
-export default pool;
+export default poolPromise;
