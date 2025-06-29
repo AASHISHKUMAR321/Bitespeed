@@ -1,5 +1,6 @@
 import mysql from 'mysql2';
 import dotenv from 'dotenv';
+import { drizzle } from 'drizzle-orm/singlestore/driver';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ pool.connect((err)=>{
         console.log('Database connection failed',err)
         return
     }
+    const db = drizzle({ client: pool });
     console.log('Database connected')
 })
 

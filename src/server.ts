@@ -1,7 +1,7 @@
 import app from './app';
 
 // Import database connection
-import './config/db';
+import './db/index.ts';
 
 // Start the server
 app.start();

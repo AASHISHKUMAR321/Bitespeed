@@ -35,6 +35,13 @@ class App {
             res.status(200).json({ status: 'OK', timestamp: new Date() });
         });
 
+        this.app.post('/identify', (req: Request, res: Response) => {
+            res.status(200).json({ status: 'OK', timestamp: new Date() });
+        })
+
+        
+
+        
         // Add your routes here
 
         // 404 handler
