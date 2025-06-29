@@ -12,20 +12,18 @@ dotenv.config();
 
 
 class App {
-    public app: Application;
+    public readonly app: Application;
+    private readonly port: number;
 
     constructor() {
         this.app = express();
-        this.config();
+        this.port = parseInt(process.env.PORT || '3000', 10);
+        
         this.initializeMiddlewares();
         this.initializeRoutes();
         this.initializeErrorHandling();
     }
-
-    private config(): void {
-        this.app.set('port', process.env.PORT || 3000);
-    }
-
+    
     private initializeMiddlewares(): void {
         this.app.use(cors());
         this.app.use(express.json());
@@ -34,11 +32,16 @@ class App {
 
     private initializeRoutes(): void {
         // Health check route
-        this.app.get('/health', (req: Request, res: Response) => {
-            res.status(200).json({ status: 'OK', timestamp: new Date() });
+        this.app.get('/health', (req: Request, res: Response, next: NextFunction) => {
+            try {
+                res.status(200).json({ status: 'OK', timestamp: new Date() });
+                return;
+            } catch (error) {
+                next(error);
+            }
         });
 
-        this.app.post('/identify', async (req: Request, res: Response) => {
+        const identifyHandler = async (req: Request, res: Response, next: NextFunction) => {
             try {
                 const { email, phoneNumber } = req.body as {
                     email?: string;
@@ -46,7 +49,8 @@ class App {
                 };
 
                 if (!email && !phoneNumber) {
-                    return res.status(400).json({ error: 'Either email or phoneNumber is required' });
+                    res.status(400).json({ error: 'Either email or phoneNumber is required' });
+                    return;
                 }
 
                 // Build where conditions
@@ -76,7 +80,7 @@ class App {
                     const result = await db.insert(contacts).values(newContact);
                     const insertId = Number(result[0].insertId);
 
-                    return res.status(200).json({
+                    res.status(200).json({
                         contact: {
                             primaryContatctId: insertId,
                             emails: email ? [email] : [],
@@ -223,30 +227,41 @@ class App {
                         emails,
                         phoneNumbers,
                         secondaryContactIds
-                    }
-                });
-
-            } catch (error) {
-                console.error('Error in /identify:', error);
-                return res.status(500).json({ error: 'Internal server error' });
-            }
-        })
-
-        this.app.get('/identify', async (req: Request, res: Response) => {
-            try {
-
-                const getContacts = await db.select().from(contacts)
-
-                return res.status(200).json({ contacts: getContacts });
-            } catch (error) {
-                console.error('Error in /identity:', error);
-                return res.status(500).json({ error: 'Internal server error' });
-            }
-        })
-
         
-
+        // Prepare response - ensure primary contact's email/phone are first in the arrays
+        const allEmails = allLinkedContacts
+            .map(c => c.email)
+            .filter(Boolean);
+            
+        const allPhoneNumbers = allLinkedContacts
+            .map(c => c.phoneNumber)
+            .filter(Boolean);
         
+        // Remove duplicates while preserving order
+        const emails = [...new Set(allEmails)];
+        const phoneNumbers = [...new Set(allPhoneNumbers)];
+        
+        // Get all secondary contact IDs
+        const secondaryContactIds = primaryContact ? allLinkedContacts
+            .filter((c: Contact) => c.id !== primaryContact.id)
+            .map((c: Contact) => c.id) : [];
+        
+        // Ensure primary's email and phone are first in the arrays
+        if (primaryContact && primaryContact.email && emails.includes(primaryContact.email)) {
+            const index = emails.indexOf(primaryContact.email);
+            if (index > 0) {
+                emails.splice(index, 1);
+                emails.unshift(primaryContact.email);
+            }
+        }
+        
+        if (primaryContact && primaryContact.phoneNumber && phoneNumbers.includes(primaryContact.phoneNumber)) {
+            const index = phoneNumbers.indexOf(primaryContact.phoneNumber);
+            if (index > 0) {
+                phoneNumbers.splice(index, 1);
+                phoneNumbers.unshift(primaryContact.phoneNumber);
+            }
+        }
         // Add your routes here
 
         // 404 handler
@@ -267,9 +282,8 @@ class App {
     }
 
     public start(): void {
-        const port = this.app.get('port');
-        this.app.listen(port, () => {
-            console.log(`Server is running on port ${port} in ${this.app.get('env')} mode`);
+        this.app.listen(this.port, () => {
+            console.log(`Server is running on port ${this.port} in ${process.env.NODE_ENV || 'development'} mode`);
         });
     }
 }
